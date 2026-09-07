@@ -90,7 +90,7 @@ async function route(){
    if(map.getLayer("route"))map.removeLayer("route");if(map.getSource("route"))map.removeSource("route");
    map.addSource("route",{type:"geojson",data:g});
    map.addLayer({id:"route",type:"line",source:"route",layout:{"line-cap":"round","line-join":"round"},paint:{"line-color":"#f2c32d","line-width":6,"line-opacity":.95}});
-   const b=new maptiltersdk.LngLatBounds(g.coordinates[0],g.coordinates[0]);g.coordinates.forEach(c=>b.extend(c));map.fitBounds(b,{padding:80,maxZoom:16,duration:700});
+   const b=new maptilersdk.LngLatBounds(g.coordinates[0],g.coordinates[0]);g.coordinates.forEach(c=>b.extend(c));map.fitBounds(b,{padding:80,maxZoom:16,duration:700});
    $("msg").textContent="Rota: "+(d.routes[0].distance/1000).toFixed(1)+" km • "+Math.round(d.routes[0].duration/60)+" min";
  }catch(e){msg("Não foi possível calcular a rota. Tente novamente.")}
 }
