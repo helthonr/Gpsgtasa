@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>GPS GTA SA</title>
+<link rel="stylesheet" href="https://cdn.maptiler.com/maptiler-sdk-js/v4.1.0/maptiler-sdk.css">
+<style>
+html,body,#map{width:100%;height:100%;margin:0}body{overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Arial;background:#222}
+*{box-sizing:border-box}.panel{position:absolute;z-index:10;top:max(12px,env(safe-area-inset-top));left:12px;right:12px}
+.row{display:flex;gap:7px}.search{flex:1;padding:14px;border:0;border-radius:13px;font-size:16px;box-shadow:0 3px 15px #0008;outline:0}
+button{border:0;border-radius:12px;padding:12px 14px;font-weight:700;box-shadow:0 3px 12px #0007}.go{background:#e7b934}.gps{background:#fff;font-size:20px;width:48px}
+#results{margin-top:7px;background:#fff;border-radius:13px;overflow:hidden;display:none;box-shadow:0 4px 16px #0009}
+.item{padding:13px;border-bottom:1px solid #ddd;font-size:15px}.item:last-child{border:0}.item small{display:block;color:#666;margin-top:3px}
+.bottom{position:absolute;z-index:10;bottom:max(16px,env(safe-area-inset-bottom));left:12px;right:12px;display:none}
+.route{width:100%;background:#e7b934;font-size:15px}.msg{margin-bottom:8px;text-align:center;background:#111d;color:white;border-radius:20px;padding:9px;font-size:13px}
+.pin{width:25px;height:25px;border-radius:50%;background:#dcae26;border:3px solid white;box-shadow:0 2px 8px #000}
+.me{width:24px;height:24px;border-radius:50%;background:#1685ff;border:3px solid white;box-shadow:0 2px 9px #000}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div class="row">
+    <input id="q" class="search" placeholder="Pesquisar rua, número, lugar..." autocomplete="off">
+    <button id="go" class="go">🔎</button>
+    <button id="gps" class="gps">⌖</button>
+  </div>
+  <div id="results"></div>
+</div>
+<div id="bottom" class="bottom"><div id="msg" class="msg"></div><button id="route" class="route">🛣️ TRAÇAR ROTA ATÉ O DESTINO</button></div>
+
+<script src="https://cdn.maptiler.com/maptiler-sdk-js/v4.1.0/maptiler-sdk.umd.min.js"></script>
+<script>
+const KEY="V8DFSo7qMSgAu0JLPgjH";
+const STYLE="https://api.maptiler.com/maps/2b36665a-5454-4b57-9676-ff47dc5d11cc/style.json?key="+KEY;
+maptilersdk.config.apiKey=KEY;
+const map=new maptilersdk.Map({container:"map",style:STYLE,center:[-49.12702,-25.51647],zoom:14.49,bearing:-27.8});
+let pos=null,dest=null,me=null,dmarker=null,watch=null;
+
+const $=id=>document.getElementById(id);
+function msg(t){$("msg").textContent=t;$("bottom").style.display="block";clearTimeout(window.mt);window.mt=setTimeout(()=>{$("bottom").style.display=dest?"block":"none"},3500)}
+function el(c){let e=document.createElement("div");e.className=c;return e}
+function setPos(p,center=false){
+ pos=[p.coords.longitude,p.coords.latitude];
+ if(!me) me=new maptilersdk.Marker({element:el("me")}).setLngLat(pos).addTo(map); else me.setLngLat(pos);
+ if(center)map.easeTo({center:pos,zoom:16,duration:600});
+}
+function locate(){
+ if(!navigator.geolocation)return msg("Este navegador não oferece GPS.");
+ navigator.geolocation.getCurrentPosition(p=>setPos(p,true),()=>msg("Autorize a localização no iPhone."),{enableHighAccuracy:true,timeout:12000,maximumAge:2000});
+ if(watch===null)watch=navigator.geolocation.watchPosition(p=>setPos(p,false),()=>{}, {enableHighAccuracy:true,maximumAge:3000,timeout:12000});
+}
+map.on("load",locate); $("gps").onclick=()=>{if(pos)map.easeTo({center:pos,zoom:16,duration:600});else locate()};
+
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+async function search(){
+ const q=$("q").value.trim(); if(!q)return;
+ $("results").style.display="block";$("results").innerHTML='<div class="item">🔎 Procurando...</div>';
+ try{
+   let u="https://api.maptiler.com/geocoding/"+encodeURIComponent(q)+".json?key="+KEY+"&language=pt-BR&country=br&limit=8&fuzzyMatch=true";
+   if(pos)u+="&proximity="+pos[0]+","+pos[1];
+   const r=await fetch(u); if(!r.ok)throw Error("HTTP "+r.status); const d=await r.json();
+   const fs=d.features||[];$("results").innerHTML="";
+   if(!fs.length){$("results").innerHTML='<div class="item">Nenhum endereço encontrado.</div>';return}
+   fs.forEach(f=>{
+     const name=f.text||f.properties?.label||"Local"; const label=f.properties?.label||f.place_name||name;
+     const x=document.createElement("div");x.className="item";x.innerHTML="<b>"+esc(name)+"</b><small>"+esc(label)+"</small>";
+     x.onclick=()=>choose(f);$("results").appendChild(x);
+   });
+ }catch(e){$("results").innerHTML='<div class="item">Não consegui pesquisar agora. Verifique a internet e a chave do MapTiler.</div>';console.error(e)}
+}
+function choose(f){
+ dest=f.geometry.coordinates;
+ if(dmarker)dmarker.remove();
+ dmarker=new maptilersdk.Marker({element:el("pin")}).setLngLat(dest).addTo(map);
+ $("results").style.display="none";map.easeTo({center:dest,zoom:16,duration:600});
+ $("bottom").style.display="block";$("msg").textContent=(f.properties?.label||f.place_name||"Destino selecionado");
+}
+$("go").onclick=search;$("q").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
+
+async function route(){
+ if(!dest)return;
+ if(!pos){locate();msg("Pegando sua localização...");return}
+ msg("Calculando rota...");
+ try{
+   const u="https://router.project-osrm.org/route/v1/driving/"+pos[0]+","+pos[1]+";"+dest[0]+","+dest[1]+"?overview=full&geometries=geojson";
+   const r=await fetch(u);if(!r.ok)throw Error();const d=await r.json();if(d.code!=="Ok")throw Error();
+   const g=d.routes[0].geometry;
+   if(map.getLayer("route"))map.removeLayer("route");if(map.getSource("route"))map.removeSource("route");
+   map.addSource("route",{type:"geojson",data:g});
+   map.addLayer({id:"route",type:"line",source:"route",layout:{"line-cap":"round","line-join":"round"},paint:{"line-color":"#f2c32d","line-width":6,"line-opacity":.95}});
+   const b=new maptiltersdk.LngLatBounds(g.coordinates[0],g.coordinates[0]);g.coordinates.forEach(c=>b.extend(c));map.fitBounds(b,{padding:80,maxZoom:16,duration:700});
+   $("msg").textContent="Rota: "+(d.routes[0].distance/1000).toFixed(1)+" km • "+Math.round(d.routes[0].duration/60)+" min";
+ }catch(e){msg("Não foi possível calcular a rota. Tente novamente.")}
+}
+$("route").onclick=route;
+</script>
+</body>
+</html>
